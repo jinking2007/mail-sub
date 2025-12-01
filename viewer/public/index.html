@@ -292,47 +292,45 @@
                async openEmail(email) {
                     this.currentEmail = email;
                     this.detailVisible = true;
+                    // 显示加载动画
                     this.emailContent = '<div class="flex items-center justify-center py-20"><svg class="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>';
                     
                     try {
-                        const res = await this.api(`/api/get?key=${email.r2_key}`);
+                        // 🟢 关键修改：加上 encodeURIComponent 🟢
+                        const res = await this.api(`/api/get?key=${encodeURIComponent(email.r2_key)}`);
+                        
+                        // 如果后端返回 404 或 500
+                        if (!res || !res.ok) throw new Error('File not found');
+
                         const data = await res.json();
                         
                         let rawHTML = '';
-                        
-                        // 1. 优先使用 HTML 内容，如果没有则使用纯文本
                         if (data.html) {
                             rawHTML = data.html;
                         } else if (data.text) {
-                            // 将纯文本的换行符转换为 <br>，并包裹在段落中
                             rawHTML = `<p>${data.text.replace(/\n/g, '<br>')}</p>`;
-                            // 自动识别纯文本中的链接并转为可点击的 <a> 标签 (简单正则)
                             const urlRegex = /(https?:\/\/[^\s]+)/g;
                             rawHTML = rawHTML.replace(urlRegex, '<a href="$1" target="_blank">$1</a>');
                         } else {
                             rawHTML = '<p class="text-gray-400 italic">无内容</p>';
                         }
 
-                        // 2. 安全清洗 (防止 XSS 攻击)
-                        // ALLOW_TAGS: 允许常见的邮件格式标签
-                        // ADD_ATTR: 允许 target="_blank" 让链接在新窗口打开
+                        // 安全清洗
                         const cleanHTML = DOMPurify.sanitize(rawHTML, {
                             ADD_ATTR: ['target'],
-                            FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input'] // 禁止危险标签
+                            FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input'] 
                         });
 
-                        // 3. 强制所有链接在新窗口打开
+                        // 链接新窗口打开处理
                         const tempDiv = document.createElement('div');
                         tempDiv.innerHTML = cleanHTML;
-                        const links = tempDiv.querySelectorAll('a');
-                        links.forEach(a => {
+                        tempDiv.querySelectorAll('a').forEach(a => {
                             a.setAttribute('target', '_blank');
                             a.setAttribute('rel', 'noopener noreferrer');
                         });
-
-                        // 4. 处理表格 (包裹一层 div 以便横向滚动)
-                        const tables = tempDiv.querySelectorAll('table');
-                        tables.forEach(table => {
+                        
+                        // 表格处理
+                        tempDiv.querySelectorAll('table').forEach(table => {
                             const wrapper = document.createElement('div');
                             wrapper.className = 'email-table-wrapper';
                             table.parentNode.insertBefore(wrapper, table);
@@ -343,10 +341,14 @@
 
                     } catch(e) {
                         console.error(e);
-                        this.emailContent = '<div class="text-center py-10 text-red-500">加载邮件失败，请重试</div>';
+                        this.emailContent = `
+                            <div class="text-center py-10">
+                                <p class="text-red-500 font-bold">加载失败</p>
+                                <p class="text-xs text-gray-400 mt-2">错误详情: 文件名包含特殊字符或文件不存在</p>
+                                <p class="text-xs text-gray-300 break-all mt-1">${email.r2_key}</p>
+                            </div>`;
                     }
                 },
-
                 
                 switchBox(box) {
                     this.currentBox = box;
@@ -380,6 +382,7 @@
     </script>
 </body>
 </html>
+
 
 
 
