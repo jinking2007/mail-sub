@@ -5,15 +5,63 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="manifest" href="/manifest.json">
     <title>私人聚合邮箱</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 1. 引入带 Typography 插件的 Tailwind (关键！注意 ?plugins=typography) -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    
+    <!-- 2. 引入 Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- 3. 引入 DOMPurify (用于清洗 HTML，防止邮件里的恶意脚本攻击) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
+
     <style>
         [x-cloak] { display: none !important; }
-        .email-body img { max-width: 100%; height: auto; }
-        /* 登录页背景 */
-        .login-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        
+        /* --- 邮件内容专用样式优化 --- */
+        .email-content {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            word-wrap: break-word; /* 防止长单词撑破布局 */
+        }
+        
+        /* 让图片最大宽度为100%，防止撑出屏幕 */
+        .email-content img {
+            max-width: 100% !important;
+            height: auto !important;
+            display: inline-block;
+            border-radius: 8px; /* 图片圆角 */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); /* 图片轻微阴影 */
+            margin: 10px 0;
+        }
+
+        /* 优化引用块 (回复内容) */
+        .email-content blockquote {
+            border-left: 4px solid #e5e7eb;
+            padding-left: 1rem;
+            color: #6b7280;
+            font-style: italic;
+            margin: 1rem 0;
+        }
+
+        /* 优化链接显示 */
+        .email-content a {
+            color: #2563eb; /* 漂亮的蓝色 */
+            text-decoration: underline;
+            text-underline-offset: 2px;
+            transition: color 0.2s;
+        }
+        .email-content a:hover {
+            color: #1d4ed8;
+        }
+
+        /* 优化表格 (邮件里常用表格排版) */
+        .email-table-wrapper {
+            overflow-x: auto; /* 允许表格横向滚动 */
+            margin-bottom: 1rem;
+        }
     </style>
 </head>
+    
 <body class="bg-gray-50 h-screen overflow-hidden text-slate-800" x-data="mailApp()">
 
     <!-- 1. 登录界面 -->
@@ -95,7 +143,10 @@
             <h2 class="font-bold truncate flex-1" x-text="currentEmail?.subject"></h2>
         </div>
         <div class="flex-1 overflow-y-auto p-4 bg-white">
-            <div class="email-body" x-html="emailContent"></div>
+     <!-- 增加了 prose 类库，自动美化排版 -->
+          <div class="email-content prose prose-slate max-w-none prose-sm md:prose-base prose-img:rounded-xl prose-a:text-blue-600 hover:prose-a:text-blue-500" 
+     x-html="emailContent">
+                 </div>
         </div>
     </div>
 
@@ -238,17 +289,65 @@
                     this.loading = false;
                 },
 
-                async openEmail(email) {
+               async openEmail(email) {
                     this.currentEmail = email;
                     this.detailVisible = true;
-                    this.emailContent = '加载中...';
-                    const res = await this.api(`/api/get?key=${email.r2_key}`);
-                    if(res) {
+                    this.emailContent = '<div class="flex items-center justify-center py-20"><svg class="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>';
+                    
+                    try {
+                        const res = await this.api(`/api/get?key=${email.r2_key}`);
                         const data = await res.json();
-                        this.emailContent = data.html || data.text.replace(/\n/g, '<br>');
+                        
+                        let rawHTML = '';
+                        
+                        // 1. 优先使用 HTML 内容，如果没有则使用纯文本
+                        if (data.html) {
+                            rawHTML = data.html;
+                        } else if (data.text) {
+                            // 将纯文本的换行符转换为 <br>，并包裹在段落中
+                            rawHTML = `<p>${data.text.replace(/\n/g, '<br>')}</p>`;
+                            // 自动识别纯文本中的链接并转为可点击的 <a> 标签 (简单正则)
+                            const urlRegex = /(https?:\/\/[^\s]+)/g;
+                            rawHTML = rawHTML.replace(urlRegex, '<a href="$1" target="_blank">$1</a>');
+                        } else {
+                            rawHTML = '<p class="text-gray-400 italic">无内容</p>';
+                        }
+
+                        // 2. 安全清洗 (防止 XSS 攻击)
+                        // ALLOW_TAGS: 允许常见的邮件格式标签
+                        // ADD_ATTR: 允许 target="_blank" 让链接在新窗口打开
+                        const cleanHTML = DOMPurify.sanitize(rawHTML, {
+                            ADD_ATTR: ['target'],
+                            FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input'] // 禁止危险标签
+                        });
+
+                        // 3. 强制所有链接在新窗口打开
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = cleanHTML;
+                        const links = tempDiv.querySelectorAll('a');
+                        links.forEach(a => {
+                            a.setAttribute('target', '_blank');
+                            a.setAttribute('rel', 'noopener noreferrer');
+                        });
+
+                        // 4. 处理表格 (包裹一层 div 以便横向滚动)
+                        const tables = tempDiv.querySelectorAll('table');
+                        tables.forEach(table => {
+                            const wrapper = document.createElement('div');
+                            wrapper.className = 'email-table-wrapper';
+                            table.parentNode.insertBefore(wrapper, table);
+                            wrapper.appendChild(table);
+                        });
+
+                        this.emailContent = tempDiv.innerHTML;
+
+                    } catch(e) {
+                        console.error(e);
+                        this.emailContent = '<div class="text-center py-10 text-red-500">加载邮件失败，请重试</div>';
                     }
                 },
 
+                
                 switchBox(box) {
                     this.currentBox = box;
                     this.loadEmails();
@@ -281,5 +380,6 @@
     </script>
 </body>
 </html>
+
 
 
