@@ -4,185 +4,255 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="manifest" href="/manifest.json">
-    <title>我的私人邮箱</title>
-    <!-- 引入 Tailwind CSS (美化) -->
+    <title>私人聚合邮箱</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 Alpine.js (交互逻辑) -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>
-        [x-cloak] { display: none !important; } /* 加载前隐藏未渲染内容 */
-        .email-body img { max-width: 100%; height: auto; } /* 防止邮件图片撑破布局 */
-        /* 自定义滚动条 */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        [x-cloak] { display: none !important; }
+        .email-body img { max-width: 100%; height: auto; }
+        /* 登录页背景 */
+        .login-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
     </style>
 </head>
-<body class="bg-gray-50 h-screen flex overflow-hidden text-slate-800" x-data="mailApp()">
+<body class="bg-gray-50 h-screen overflow-hidden text-slate-800" x-data="mailApp()">
 
-    <!-- 侧边栏 (桌面端显示，移动端隐藏) -->
-    <aside class="w-64 bg-white border-r border-gray-200 flex-col hidden md:flex">
-        <div class="p-6 text-xl font-bold text-blue-600 flex items-center gap-2">
-            <span>📧 私人聚合邮</span>
-        </div>
-        <nav class="flex-1 px-4 space-y-2 overflow-y-auto">
-            <!-- 自动生成标签列表 -->
-            <template x-for="box in mailboxes" :key="box.id">
-                <button @click="currentBox = box.id; loadList()"
-                    :class="currentBox === box.id ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'"
-                    class="w-full text-left px-4 py-3 rounded-lg flex justify-between items-center transition-colors">
-                    <span x-text="box.name"></span>
-                    <span x-show="box.count > 0" x-text="box.count" class="bg-gray-200 text-xs px-2 py-1 rounded-full text-gray-600"></span>
+    <!-- 1. 登录界面 -->
+    <div x-show="!isLoggedIn" class="fixed inset-0 z-[100] login-bg flex items-center justify-center p-4" x-transition>
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+            <h1 class="text-2xl font-bold text-center mb-6 text-gray-800">🔐 邮箱登录</h1>
+            <form @submit.prevent="login">
+                <input type="password" x-model="loginPass" placeholder="请输入密码" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-purple-500 outline-none mb-4" required>
+                <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition-colors" :disabled="loading">
+                    <span x-show="!loading">进入邮箱</span>
+                    <span x-show="loading">验证中...</span>
                 </button>
-            </template>
-        </nav>
-        <div class="p-4 border-t border-gray-100 text-xs text-center text-gray-400">
-            Powered by Cloudflare
+            </form>
+            <p class="text-center text-xs text-gray-400 mt-4">初始密码: 123456</p>
         </div>
-    </aside>
+    </div>
 
-    <!-- 主内容区 -->
-    <main class="flex-1 flex flex-col h-full relative">
-        <!-- 顶部导航条 (移动端) -->
-        <header class="h-14 bg-white border-b border-gray-200 flex items-center px-4 md:hidden justify-between z-10">
-            <span class="font-bold text-lg" x-text="getBoxName()"></span>
-            <div class="flex gap-2">
-                <!-- 简单的移动端筛选切换 -->
-                <select x-model="currentBox" @change="loadList()" class="bg-gray-100 rounded px-2 py-1 text-sm border-none outline-none">
-                    <template x-for="box in mailboxes" :key="box.id">
-                        <option :value="box.id" x-text="box.name"></option>
-                    </template>
-                </select>
+    <!-- 2. 主界面 (登录后显示) -->
+    <div x-show="isLoggedIn" class="flex h-full" x-cloak>
+        
+        <!-- 侧边栏 -->
+        <aside class="w-64 bg-white border-r border-gray-200 flex-col hidden md:flex">
+            <div class="p-6 flex justify-between items-center">
+                <span class="text-xl font-bold text-blue-600">📧 聚合邮</span>
+                <button @click="openSettings" class="text-gray-400 hover:text-gray-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg></button>
             </div>
-        </header>
+            <nav class="flex-1 px-4 space-y-2 overflow-y-auto">
+                <button @click="switchBox('All')" :class="currentBox==='All'?'bg-blue-50 text-blue-600':'text-gray-600 hover:bg-gray-100'" class="w-full text-left px-4 py-3 rounded-lg font-medium">📬 全部邮件</button>
+                <template x-for="tag in tags" :key="tag.id">
+                    <button @click="switchBox(tag.id)" 
+                        :class="currentBox===tag.id ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'"
+                        class="w-full text-left px-4 py-3 rounded-lg flex items-center transition-colors">
+                        <span x-text="tag.name"></span>
+                    </button>
+                </template>
+            </nav>
+        </aside>
 
-        <!-- 邮件列表 -->
-        <div class="flex-1 overflow-y-auto p-2 md:p-6" id="mail-list">
-            <div x-show="loading" class="text-center py-10 text-gray-400">
-                <svg class="animate-spin h-8 w-8 mx-auto mb-2 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                正在加载邮件...
-            </div>
+        <!-- 邮件列表区 -->
+        <main class="flex-1 flex flex-col h-full relative">
+            <!-- 移动端顶部 -->
+            <header class="h-14 bg-white border-b border-gray-200 flex items-center px-4 md:hidden justify-between z-10">
+                <span class="font-bold text-lg" x-text="currentBox === 'All' ? '全部邮件' : tags.find(t=>t.id===currentBox)?.name"></span>
+                <div class="flex gap-3">
+                    <button @click="openSettings"><svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg></button>
+                    <!-- 移动端侧边栏切换可用 Select 替代 -->
+                    <select x-model="currentBox" @change="loadEmails" class="bg-gray-100 rounded text-sm p-1">
+                        <option value="All">全部</option>
+                        <template x-for="tag in tags" :key="tag.id">
+                            <option :value="tag.id" x-text="tag.name"></option>
+                        </template>
+                    </select>
+                </div>
+            </header>
 
-            <div x-show="!loading && emails.length === 0" class="text-center py-20 text-gray-400">
-                📭 暂无邮件
-            </div>
-
-            <div class="space-y-3 max-w-4xl mx-auto" x-show="!loading">
+            <!-- 列表内容 -->
+            <div class="flex-1 overflow-y-auto p-2 md:p-6 bg-gray-50" id="mail-list">
+                <div x-show="loading" class="text-center py-10 text-gray-400">加载中...</div>
+                <div x-show="!loading && emails.length === 0" class="text-center py-10 text-gray-400">暂无邮件</div>
                 <template x-for="email in emails" :key="email.r2_key">
-                    <div @click="openEmail(email)" class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow active:scale-[0.99]">
-                        <div class="flex justify-between items-start mb-1">
-                            <div class="flex items-center gap-2">
-                                <span class="px-2 py-0.5 rounded text-xs font-medium" 
-                                      :class="getBadgeColor(email.mailbox)" x-text="email.mailbox"></span>
-                                <h3 class="font-bold text-gray-800 line-clamp-1" x-text="email.subject"></h3>
-                            </div>
-                            <span class="text-xs text-gray-400 whitespace-nowrap" x-text="formatDate(email.received_at)"></span>
+                    <div @click="openEmail(email)" class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 cursor-pointer mb-3 hover:shadow-md">
+                        <div class="flex justify-between items-start">
+                            <h3 class="font-bold text-gray-800 flex-1 truncate mr-2" x-text="email.subject"></h3>
+                            <span class="text-xs text-gray-400 whitespace-nowrap" x-text="new Date(email.received_at).toLocaleDateString()"></span>
                         </div>
-                        <div class="text-sm text-gray-500 mb-2 truncate" x-text="email.from_address"></div>
-                        <p class="text-sm text-gray-400 line-clamp-2" x-text="email.snippet"></p>
+                        <div class="text-xs text-blue-500 mb-1" x-text="email.from_address"></div>
+                        <div class="text-sm text-gray-500 line-clamp-2" x-text="email.snippet"></div>
+                        <div class="mt-2 text-xs bg-gray-100 inline-block px-2 py-0.5 rounded text-gray-500" x-text="email.mailbox"></div>
                     </div>
                 </template>
             </div>
-        </div>
+        </main>
+    </div>
 
-        <!-- 详情弹窗 (全屏遮罩) -->
-        <div x-show="detailVisible" x-transition.opacity class="fixed inset-0 z-50 bg-white flex flex-col" x-cloak>
-            <!-- 详情页头部 -->
-            <div class="h-14 border-b border-gray-200 flex items-center px-4 bg-white shadow-sm shrink-0">
-                <button @click="closeDetail()" class="mr-4 p-2 hover:bg-gray-100 rounded-full">
-                    <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                </button>
-                <h2 class="font-bold text-lg truncate flex-1" x-text="currentEmail?.subject"></h2>
-            </div>
+    <!-- 3. 详情弹窗 -->
+    <div x-show="detailVisible" x-transition.opacity class="fixed inset-0 z-50 bg-white flex flex-col" x-cloak>
+        <div class="h-14 border-b border-gray-200 flex items-center px-4 bg-gray-50 shrink-0">
+            <button @click="detailVisible = false" class="mr-4 font-bold text-gray-600">← 返回</button>
+            <h2 class="font-bold truncate flex-1" x-text="currentEmail?.subject"></h2>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 bg-white">
+            <div class="email-body" x-html="emailContent"></div>
+        </div>
+    </div>
+
+    <!-- 4. 设置弹窗 -->
+    <div x-show="settingsVisible" class="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4" x-cloak>
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+            <h2 class="text-xl font-bold mb-4">⚙️ 设置</h2>
             
-            <!-- 详情页内容 -->
-            <div class="flex-1 overflow-y-auto p-4 md:p-8 bg-gray-50">
-                <div class="max-w-4xl mx-auto bg-white rounded-xl shadow p-6 min-h-[50vh]">
-                    <!-- 发件人信息 -->
-                    <div class="border-b border-gray-100 pb-4 mb-6">
-                        <div class="text-lg font-bold mb-1" x-text="currentEmail?.subject"></div>
-                        <div class="flex justify-between items-center text-sm">
-                            <div class="text-blue-600 font-medium" x-text="currentEmail?.from_address"></div>
-                            <div class="text-gray-400" x-text="currentEmail ? formatDate(currentEmail.received_at) : ''"></div>
+            <!-- 标签管理 -->
+            <div class="mb-6">
+                <h3 class="font-bold text-sm text-gray-500 mb-2 uppercase">邮箱标签管理</h3>
+                <div class="space-y-2 mb-2">
+                    <template x-for="(tag, index) in settingsTags" :key="index">
+                        <div class="flex gap-2">
+                            <input type="text" x-model="tag.id" placeholder="ID (如 Gmail)" class="border p-2 rounded w-1/3 text-sm">
+                            <input type="text" x-model="tag.name" placeholder="显示名称" class="border p-2 rounded w-1/3 text-sm">
+                            <button @click="removeTag(index)" class="text-red-500 hover:text-red-700 text-sm">删除</button>
                         </div>
-                    </div>
-                    <!-- 邮件正文 -->
-                    <div class="email-body prose max-w-none text-gray-700" x-html="emailContent"></div>
+                    </template>
                 </div>
+                <button @click="addTag" class="text-blue-600 text-sm font-bold">+ 添加标签</button>
+                <p class="text-xs text-gray-400 mt-2">提示：ID 应匹配收件人地址中的关键词(如 'shop')，用于自动分类。</p>
+            </div>
+
+            <!-- 密码管理 -->
+            <div class="mb-6 pt-4 border-t">
+                <h3 class="font-bold text-sm text-gray-500 mb-2 uppercase">修改登录密码</h3>
+                <input type="password" x-model="newPassword" placeholder="输入新密码 (留空则不修改)" class="w-full border p-2 rounded mb-2">
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t">
+                <button @click="logout" class="text-red-600 mr-auto text-sm">退出登录</button>
+                <button @click="settingsVisible = false" class="px-4 py-2 text-gray-600">取消</button>
+                <button @click="saveSettings" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">保存更改</button>
             </div>
         </div>
-    </main>
+    </div>
 
     <script>
         function mailApp() {
             return {
+                isLoggedIn: false,
+                token: localStorage.getItem('mail_token') || '',
+                loginPass: '',
                 loading: false,
-                detailVisible: false,
                 emails: [],
+                tags: [], // 实际使用的标签
+                settingsTags: [], // 设置弹窗里的临时标签
+                currentBox: 'All',
+                detailVisible: false,
+                settingsVisible: false,
                 currentEmail: null,
                 emailContent: '',
-                currentBox: 'All',
-                // 这里定义你的自定义标签页
-                mailboxes: [
-                    { id: 'All', name: '全部邮件', count: '' },
-                    { id: 'Gmail', name: 'Gmail', count: '' },
-                    { id: 'Outlook', name: 'Outlook', count: '' },
-                    { id: 'QQ', name: 'QQ邮箱', count: '' },
-                    { id: 'Work', name: '工作', count: '' }, // 自定义示例
-                    { id: 'Shop', name: '购物', count: '' }  // 自定义示例
-                ],
+                newPassword: '',
 
                 init() {
-                    this.loadList();
-                },
-
-                getBoxName() {
-                    return this.mailboxes.find(b => b.id === this.currentBox)?.name || '邮箱';
-                },
-
-                getBadgeColor(box) {
-                    const colors = {
-                        'Gmail': 'bg-red-100 text-red-600',
-                        'Outlook': 'bg-blue-100 text-blue-600',
-                        'QQ': 'bg-yellow-100 text-yellow-600',
-                        'Main': 'bg-gray-100 text-gray-600'
-                    };
-                    return colors[box] || 'bg-indigo-100 text-indigo-600';
-                },
-
-                formatDate(ts) {
-                    return new Date(ts).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' });
-                },
-
-                async loadList() {
-                    this.loading = true;
-                    this.emails = [];
-                    try {
-                        const res = await fetch(`/api/list?box=${this.currentBox}`);
-                        this.emails = await res.json();
-                    } catch(e) {
-                        console.error(e);
+                    if (this.token) {
+                        this.isLoggedIn = true;
+                        this.fetchSettings(); // 登录后加载配置
+                        this.loadEmails();
                     }
+                },
+
+                async login() {
+                    this.loading = true;
+                    try {
+                        const res = await fetch('/api/login', {
+                            method: 'POST',
+                            body: JSON.stringify({ password: this.loginPass })
+                        });
+                        if (res.ok) {
+                            const data = await res.json();
+                            this.token = data.token;
+                            localStorage.setItem('mail_token', this.token);
+                            this.isLoggedIn = true;
+                            this.fetchSettings();
+                            this.loadEmails();
+                        } else {
+                            alert('密码错误');
+                        }
+                    } catch(e) { alert('登录失败'); }
+                    this.loading = false;
+                },
+
+                logout() {
+                    this.token = '';
+                    localStorage.removeItem('mail_token');
+                    this.isLoggedIn = false;
+                    this.settingsVisible = false;
+                },
+
+                // 通用 API 请求 (带 Token)
+                async api(url, options = {}) {
+                    const headers = { 'Authorization': this.token, ...options.headers };
+                    const res = await fetch(url, { ...options, headers });
+                    if (res.status === 401) this.logout();
+                    return res;
+                },
+
+                async fetchSettings() {
+                    try {
+                        const res = await this.api('/api/settings/get');
+                        const data = await res.json();
+                        this.tags = data.tags;
+                    } catch(e) {}
+                },
+
+                async loadEmails() {
+                    this.loading = true;
+                    try {
+                        const res = await this.api(`/api/list?box=${this.currentBox}`);
+                        this.emails = await res.json();
+                    } catch(e) {}
                     this.loading = false;
                 },
 
                 async openEmail(email) {
                     this.currentEmail = email;
                     this.detailVisible = true;
-                    this.emailContent = '<div class="text-center py-10 text-gray-400">正在下载邮件内容...</div>';
-                    
+                    this.emailContent = '加载中...';
                     try {
-                        const res = await fetch(`/api/get?key=${email.r2_key}`);
+                        const res = await this.api(`/api/get?key=${email.r2_key}`);
                         const data = await res.json();
-                        // 优先显示HTML，如果没有则显示纯文本并处理换行
                         this.emailContent = data.html || data.text.replace(/\n/g, '<br>');
-                    } catch(e) {
-                        this.emailContent = '加载失败';
-                    }
+                    } catch(e) {}
                 },
 
-                closeDetail() {
-                    this.detailVisible = false;
-                    this.currentEmail = null;
+                switchBox(box) {
+                    this.currentBox = box;
+                    this.loadEmails();
+                },
+
+                // 设置相关逻辑
+                openSettings() {
+                    this.settingsTags = JSON.parse(JSON.stringify(this.tags)); // 深拷贝
+                    this.newPassword = '';
+                    this.settingsVisible = true;
+                },
+                addTag() {
+                    this.settingsTags.push({ id: '', name: '' });
+                },
+                removeTag(index) {
+                    this.settingsTags.splice(index, 1);
+                },
+                async saveSettings() {
+                    const payload = { tags: this.settingsTags };
+                    if (this.newPassword) payload.newPassword = this.newPassword;
+                    
+                    try {
+                        await this.api('/api/settings/save', {
+                            method: 'POST',
+                            body: JSON.stringify(payload)
+                        });
+                        this.tags = this.settingsTags; // 更新界面
+                        alert('保存成功');
+                        this.settingsVisible = false;
+                    } catch(e) { alert('保存失败'); }
                 }
             }
         }
