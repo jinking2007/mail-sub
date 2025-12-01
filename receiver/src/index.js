@@ -19,7 +19,8 @@ export default {
     const rawEmail = await new Response(message.raw).arrayBuffer();
     const parsed = await parser.parse(rawEmail);
     const timestamp = Date.now();
-    const r2Key = `${timestamp}_${message.from}.json`;
+    // 使用 crypto.randomUUID() 生成纯字母数字的文件名，绝对安全
+    const r2Key = `${timestamp}_${crypto.randomUUID()}.json`;
 
     let tags = [];
     try {
@@ -131,5 +132,6 @@ export default {
     return new Response('Not Found', { status: 404, headers: corsHeaders });
   }
 };
+
 
 
