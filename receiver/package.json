@@ -1,0 +1,9 @@
+{
+  "name": "mail-receiver",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.js",
+  "dependencies": {
+    "postal-mime": "^1.0.0"
+  }
+}

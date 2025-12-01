@@ -1,0 +1,12 @@
+name = "mail-receiver"
+main = "src/index.js"
+compatibility_date = "2023-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mail-db"
+database_id = "YOUR_DB_ID_HERE"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "mail-storage"
