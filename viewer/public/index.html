@@ -134,16 +134,22 @@
         </div>
     </div>
 
-    <script>
+<script>
         function mailApp() {
             return {
+                // ===========================================
+                // 👇 请把下面这个地址换成你第一步复制的 Worker 地址 👇
+                // 例如: 'https://mail-receiver.zhangsan.workers.dev'
+                api_base: 'https://mail-receiver.ludeer.workers.dev', 
+                // ===========================================
+
                 isLoggedIn: false,
                 token: localStorage.getItem('mail_token') || '',
                 loginPass: '',
                 loading: false,
                 emails: [],
-                tags: [], // 实际使用的标签
-                settingsTags: [], // 设置弹窗里的临时标签
+                tags: [], 
+                settingsTags: [], 
                 currentBox: 'All',
                 detailVisible: false,
                 settingsVisible: false,
@@ -152,9 +158,12 @@
                 newPassword: '',
 
                 init() {
+                    // 去掉末尾可能的斜杠，防止拼接出错
+                    this.api_base = this.api_base.replace(/\/$/, '');
+                    
                     if (this.token) {
                         this.isLoggedIn = true;
-                        this.fetchSettings(); // 登录后加载配置
+                        this.fetchSettings(); 
                         this.loadEmails();
                     }
                 },
@@ -162,10 +171,13 @@
                 async login() {
                     this.loading = true;
                     try {
-                        const res = await fetch('/api/login', {
+                        // 使用完整的后端地址
+                        const res = await fetch(`${this.api_base}/api/login`, {
                             method: 'POST',
+                            headers: { 'Content-Type': 'application/json' }, // 确保发送 JSON
                             body: JSON.stringify({ password: this.loginPass })
                         });
+                        
                         if (res.ok) {
                             const data = await res.json();
                             this.token = data.token;
@@ -174,9 +186,14 @@
                             this.fetchSettings();
                             this.loadEmails();
                         } else {
+                            // 打印错误以便调试
+                            console.log('Login failed:', res.status, res.statusText);
                             alert('密码错误');
                         }
-                    } catch(e) { alert('登录失败'); }
+                    } catch(e) { 
+                        console.error(e);
+                        alert('连接服务器失败，请检查 Worker 地址配置'); 
+                    }
                     this.loading = false;
                 },
 
@@ -187,28 +204,37 @@
                     this.settingsVisible = false;
                 },
 
-                // 通用 API 请求 (带 Token)
-                async api(url, options = {}) {
+                // 通用 API 请求 (自动拼接地址)
+                async api(endpoint, options = {}) {
+                    const url = `${this.api_base}${endpoint}`;
                     const headers = { 'Authorization': this.token, ...options.headers };
-                    const res = await fetch(url, { ...options, headers });
-                    if (res.status === 401) this.logout();
-                    return res;
+                    
+                    try {
+                        const res = await fetch(url, { ...options, headers });
+                        if (res.status === 401) {
+                            this.logout();
+                            alert('登录过期，请重新登录');
+                            return null;
+                        }
+                        return res;
+                    } catch (e) {
+                        console.error('API Error:', e);
+                        return null;
+                    }
                 },
 
                 async fetchSettings() {
-                    try {
-                        const res = await this.api('/api/settings/get');
+                    const res = await this.api('/api/settings/get');
+                    if(res) {
                         const data = await res.json();
                         this.tags = data.tags;
-                    } catch(e) {}
+                    }
                 },
 
                 async loadEmails() {
                     this.loading = true;
-                    try {
-                        const res = await this.api(`/api/list?box=${this.currentBox}`);
-                        this.emails = await res.json();
-                    } catch(e) {}
+                    const res = await this.api(`/api/list?box=${this.currentBox}`);
+                    if(res) this.emails = await res.json();
                     this.loading = false;
                 },
 
@@ -216,11 +242,11 @@
                     this.currentEmail = email;
                     this.detailVisible = true;
                     this.emailContent = '加载中...';
-                    try {
-                        const res = await this.api(`/api/get?key=${email.r2_key}`);
+                    const res = await this.api(`/api/get?key=${email.r2_key}`);
+                    if(res) {
                         const data = await res.json();
                         this.emailContent = data.html || data.text.replace(/\n/g, '<br>');
-                    } catch(e) {}
+                    }
                 },
 
                 switchBox(box) {
@@ -228,34 +254,31 @@
                     this.loadEmails();
                 },
 
-                // 设置相关逻辑
                 openSettings() {
-                    this.settingsTags = JSON.parse(JSON.stringify(this.tags)); // 深拷贝
+                    this.settingsTags = JSON.parse(JSON.stringify(this.tags)); 
                     this.newPassword = '';
                     this.settingsVisible = true;
                 },
-                addTag() {
-                    this.settingsTags.push({ id: '', name: '' });
-                },
-                removeTag(index) {
-                    this.settingsTags.splice(index, 1);
-                },
+                addTag() { this.settingsTags.push({ id: '', name: '' }); },
+                removeTag(index) { this.settingsTags.splice(index, 1); },
+                
                 async saveSettings() {
                     const payload = { tags: this.settingsTags };
                     if (this.newPassword) payload.newPassword = this.newPassword;
                     
-                    try {
-                        await this.api('/api/settings/save', {
-                            method: 'POST',
-                            body: JSON.stringify(payload)
-                        });
-                        this.tags = this.settingsTags; // 更新界面
+                    const res = await this.api('/api/settings/save', {
+                        method: 'POST',
+                        body: JSON.stringify(payload)
+                    });
+                    if(res) {
+                        this.tags = this.settingsTags;
                         alert('保存成功');
                         this.settingsVisible = false;
-                    } catch(e) { alert('保存失败'); }
+                    }
                 }
             }
         }
     </script>
 </body>
 </html>
+
