@@ -56,12 +56,27 @@ export default {
 
 // --- 登录接口 ---
     if (url.pathname === '/api/login' && request.method === 'POST') {
-        const body = await request.json(); // 获取前端发来的数据
-        const password = body.password;    // 提取密码
+        const body = await request.json();
+        const password = body.password;
         
-        // 【强制调试模式】直接比对字符串，不查库，不加密
-        // 只要你输入 123456，就无条件通过
-        if (password === '123456') {
+        // 1. 计算用户输入密码的 MD5
+        const inputHash = await md5(password);
+
+        // 2. 默认密码的哈希 (123456)
+        let targetHash = 'e10adc3949ba59abbe56e057f20f883e'; 
+        
+        // 3. 尝试从数据库读取真正存储的密码
+        try {
+            const dbPass = await env.DB.prepare("SELECT value FROM config WHERE key = 'admin_password'").first();
+            if (dbPass && dbPass.value) {
+                targetHash = dbPass.value;
+            }
+        } catch(e) {
+            console.log('读取数据库密码失败，使用默认密码', e);
+        }
+        
+        // 4. 比对哈希
+        if (inputHash === targetHash) {
             const token = btoa(`admin:${Date.now()}`); 
             return new Response(JSON.stringify({ token }), { headers: corsHeaders });
         }
@@ -116,4 +131,5 @@ export default {
     return new Response('Not Found', { status: 404, headers: corsHeaders });
   }
 };
+
 
