@@ -5,9 +5,10 @@ compatibility_date = "2023-10-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "mail-db"
-database_id = "d95afe5e-9368-417f-8713-6635c3c14714"
+database_id = "df0d1590-dcc1-433d-8bc8-f31ee9f006e9"
 
 [[r2_buckets]]
 binding = "BUCKET"
 
 bucket_name = "mail-storage"
+
